@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-innocode
+  namespace: server2
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: innocode21@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-innocode-issuer-key
+    solvers:
+      - http01:
+          ingress:
+            class:  nginx

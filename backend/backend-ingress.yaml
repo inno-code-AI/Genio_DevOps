@@ -1,0 +1,40 @@
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend-ingress
+  namespace: backend-prod
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    #nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-innocode"
+    acme.cert-manager.io/http01-edit-in-place: "true"
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+    nginx.ingress.kubernetes.io/ssl-session-cache: "shared:SSL:10m"
+    nginx.ingress.kubernetes.io/ssl-session-timeout: "1h"
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+
+    # nginx.ingress.kubernetes.io/proxy-body-size: 26m
+spec:
+  ingressClassName: "nginx"
+  tls:
+    - secretName: back-end-genio-ae-ssl
+      hosts:
+        - back-end-api.genio.ae
+    
+
+  rules:
+    - host: back-end-api.genio.ae
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 80
+
+   

@@ -1,0 +1,85 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_CREDENTIALS_ID = 'docker-hub-cred'
+        GITHUB_CREDENTIALS_ID = 'github-token'
+        IMAGE_FRONTEND = 'your-dockerhub-user/frontend:latest'
+        IMAGE_BACKEND = 'your-dockerhub-user/backend:latest'
+        K8S_DEPLOYMENT_REPO = 'git@github.com:your-repo/k8s-deployments.git'
+        K8S_FOLDER = 'k8s/'
+        EMAIL_RECIPIENT = 'your-email@example.com'
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git credentialsId: GITHUB_CREDENTIALS_ID, url: K8S_DEPLOYMENT_REPO
+            }
+        }
+
+        stage('Pull Docker Images') {
+            steps {
+                script {
+                    withDockerRegistry([credentialsId: DOCKER_CREDENTIALS_ID]) {
+                        sh "docker pull ${IMAGE_FRONTEND}"
+                        sh "docker pull ${IMAGE_BACKEND}"
+                    }
+                }
+            }
+        }
+
+        stage('Scan Images with Trivy') {
+            steps {
+                script {
+                    def images = [IMAGE_FRONTEND, IMAGE_BACKEND]
+                    for (image in images) {
+                        sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${image} || true"
+                    }
+                }
+            }
+        }
+
+        stage('Update Kubernetes Deployment Files') {
+            steps {
+                script {
+                    def frontendFile = "${K8S_FOLDER}/frontend-deployment.yaml"
+                    def backendFile = "${K8S_FOLDER}/backend-deployment.yaml"
+                    
+                    sh """
+                    sed -i 's|image: .*frontend:.*|image: ${IMAGE_FRONTEND}|' ${frontendFile}
+                    sed -i 's|image: .*backend:.*|image: ${IMAGE_BACKEND}|' ${backendFile}
+                    """
+
+                    sh """
+                    git config user.name "Jenkins"
+                    git config user.email "jenkins@example.com"
+                    git add ${frontendFile} ${backendFile}
+                    git commit -m "Updated deployment images"
+                    git push origin main
+                    """
+                }
+            }
+        }
+
+        stage('Notify via Email') {
+            steps {
+                emailext subject: "Jenkins Pipeline Successful",
+                    body: "Jenkins pipeline executed successfully. Kubernetes deployment files updated.",
+                    to: EMAIL_RECIPIENT,
+                    from: "jenkins@example.com",
+                    attachLog: true
+            }
+        }
+    }
+
+    post {
+        failure {
+            emailext subject: "Jenkins Pipeline Failed",
+                body: "Jenkins pipeline failed. Please check the logs.",
+                to: EMAIL_RECIPIENT,
+                from: "jenkins@example.com",
+                attachLog: true
+        }
+    }
+}

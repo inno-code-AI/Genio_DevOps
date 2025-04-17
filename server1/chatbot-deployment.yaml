@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot-app
+  namespace: server1  
+spec:
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: chatbot
+  template:
+    metadata:
+      labels:
+        app: chatbot
+    spec:
+      containers:
+        - name: chatbot-container
+          image: moath32/chatbot:1.0
+          ports:
+            - containerPort: 8000
+              name: chatbot-port
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+         

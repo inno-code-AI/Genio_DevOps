@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: workload-pdb
+  namespace: backend-prod
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: backend
+  
