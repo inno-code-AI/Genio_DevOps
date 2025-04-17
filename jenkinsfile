@@ -2,19 +2,21 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_CREDENTIALS_ID = 'docker-hub-cred'
-        GITHUB_CREDENTIALS_ID = 'github-token'
-        IMAGE_FRONTEND = 'your-dockerhub-user/frontend:latest'
-        IMAGE_BACKEND = 'your-dockerhub-user/backend:latest'
-        K8S_DEPLOYMENT_REPO = 'git@github.com:your-repo/k8s-deployments.git'
-        K8S_FOLDER = 'k8s/'
-        EMAIL_RECIPIENT = 'your-email@example.com'
+        DOCKER_CREDENTIALS_ID   = 'docker-hub-cred'
+        GITHUB_CREDENTIALS_ID   = 'github-token'
+        IMAGE_FRONTEND          = 'your-dockerhub-user/frontend:latest' // Updated image name of frontend
+        IMAGE_BACKEND           = 'your-dockerhub-user/backend:latest' // Updated image name of backend
+        IMAGE_SERVER1           = 'your-dockerhub-user/server1:latest' // Updated image name of server1
+        IMAGE_SERVER2           = 'your-dockerhub-user/server2:latest' // Updated image name of server2
+        K8S_DEPLOYMENT_REPO     = 'git@github.com:Genio.Devops/k8s-Dir.git' 
+        K8S_FOLDER              = 'k8s-Dir'
+        EMAIL_RECIPIENT         = 'your-email@example.com'
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Checkout K8s Manifests') {
             steps {
-                git credentialsId: GITHUB_CREDENTIALS_ID, url: K8S_DEPLOYMENT_REPO
+                git credentialsId: GITHUB_CREDENTIALS_ID, url: K8S_DEPLOYMENT_REPO, branch: 'main'
             }
         }
 
@@ -22,8 +24,15 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry([credentialsId: DOCKER_CREDENTIALS_ID]) {
-                        sh "docker pull ${IMAGE_FRONTEND}"
-                        sh "docker pull ${IMAGE_BACKEND}"
+                        def images = [
+                            IMAGE_FRONTEND,
+                            IMAGE_BACKEND,
+                            IMAGE_SERVER1,
+                            IMAGE_SERVER2
+                        ]
+                        images.each { img ->
+                            sh "docker pull ${img}"
+                        }
                     }
                 }
             }
@@ -32,9 +41,14 @@ pipeline {
         stage('Scan Images with Trivy') {
             steps {
                 script {
-                    def images = [IMAGE_FRONTEND, IMAGE_BACKEND]
-                    for (image in images) {
-                        sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${image} || true"
+                    def images = [
+                        IMAGE_FRONTEND,
+                        IMAGE_BACKEND,
+                        IMAGE_SERVER1,
+                        IMAGE_SERVER2
+                    ]
+                    images.each { img ->
+                        sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${img} || true"
                     }
                 }
             }
@@ -43,19 +57,25 @@ pipeline {
         stage('Update Kubernetes Deployment Files') {
             steps {
                 script {
-                    def frontendFile = "${K8S_FOLDER}/frontend-deployment.yaml"
-                    def backendFile = "${K8S_FOLDER}/backend-deployment.yaml"
-                    
+                    def files = [
+                        "${K8S_FOLDER}/frontend/frontend-deployment.yaml", // Updated path
+                        "${K8S_FOLDER}/backend/backend-deployment.yaml",  // Updated path
+                        "${K8S_FOLDER}/server1/server1-deployment.yaml",  // Updated path
+                        "${K8S_FOLDER}/server2/server2-deployment.yaml"   // Updated path
+                    ]
+
                     sh """
-                    sed -i 's|image: .*frontend:.*|image: ${IMAGE_FRONTEND}|' ${frontendFile}
-                    sed -i 's|image: .*backend:.*|image: ${IMAGE_BACKEND}|' ${backendFile}
+                    sed -i 's|image: .*frontend:.*|image: ${IMAGE_FRONTEND}|' ${files[0]}
+                    sed -i 's|image: .*backend:.*|image: ${IMAGE_BACKEND}|'  ${files[1]}
+                    sed -i 's|image: .*server1:.*|image: ${IMAGE_SERVER1}|'  ${files[2]}
+                    sed -i 's|image: .*server2:.*|image: ${IMAGE_SERVER2}|'  ${files[3]}
                     """
 
                     sh """
                     git config user.name "Jenkins"
                     git config user.email "jenkins@example.com"
-                    git add ${frontendFile} ${backendFile}
-                    git commit -m "Updated deployment images"
+                    git add ${files.join(' ')}
+                    git commit -m "chore: update deployment images for all services"
                     git push origin main
                     """
                 }
@@ -64,22 +84,26 @@ pipeline {
 
         stage('Notify via Email') {
             steps {
-                emailext subject: "Jenkins Pipeline Successful",
-                    body: "Jenkins pipeline executed successfully. Kubernetes deployment files updated.",
-                    to: EMAIL_RECIPIENT,
-                    from: "jenkins@example.com",
+                emailext (
+                    subject: "Jenkins Pipeline Successful",
+                    body:    "All services built, scanned, and K8s manifests updated.",
+                    to:       EMAIL_RECIPIENT,
+                    from:     "jenkins@example.com",
                     attachLog: true
+                )
             }
         }
     }
 
     post {
         failure {
-            emailext subject: "Jenkins Pipeline Failed",
-                body: "Jenkins pipeline failed. Please check the logs.",
-                to: EMAIL_RECIPIENT,
-                from: "jenkins@example.com",
+            emailext (
+                subject: "Jenkins Pipeline Failed",
+                body:    "Pipeline failed — please check the build logs.",
+                to:       EMAIL_RECIPIENT,
+                from:     "jenkins@example.com",
                 attachLog: true
+            )
         }
     }
 }
